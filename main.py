@@ -158,7 +158,13 @@ async def chat_interface(graph):
         final_state = await graph.ainvoke(initial_state, config=config)
         
         # 3. Process and display the final result
-        print(final_state["messages"][-1].content)
+        last_message = final_state["messages"][-1]
+        if isinstance(last_message.content, list):
+            for item in last_message.content:
+                if item.get('type') == 'text':
+                    print(item['text'])
+        else:
+            print(last_message.content)
         
         print("\n")
         
