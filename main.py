@@ -12,14 +12,11 @@ from langgraph.graph import StateGraph, END
 from langgraph.graph import StateGraph, START, END
 from langgraph.prebuilt import ToolNode, tools_condition
 from IPython.display import Image, display
-from langchain_mcp_adapters.client import MultiServerMCPClient
 from tools import TransactionDetails, DATABASE_FILE, setup_database, extract_transaction_details, create_invoice, get_ledger_data
 from langgraph.checkpoint.redis.aio import AsyncRedisSaver
-from mcp_manager import MCPManager
 
 load_dotenv()
 
-mcp_manager = MCPManager()
         
 # -----------------------------------STATE SCHEMA-------------------------------------------
 class AgentState(TypedDict):
@@ -50,9 +47,7 @@ async def assistant(state: AgentState):
     global llm_with_tools
     
     sys_msg = SystemMessage(content=f"""
-    You are an intelligent ERP Assistant. You have two main responsibilities:
-    1. INVOICE HELP: Use extract_transaction_details, create_invoice, and get_ledger_data for local SQLite tasks.
-    2. MONGODB HELP: You have access to a MongoDB instance. Use the MongoDB tools to query, insert, or manage documents as requested.
+    You are an intelligent ERP Assistant focused on invoice processing and transaction management.
 
     Your Workflow:
     1. When user provides transaction text, use extract_transaction_details() to parse it
@@ -98,14 +93,12 @@ async def build_graph():
     builder = StateGraph(AgentState)
     global llm_with_tools
     
-    # 1. Setup Tools
-    mongo_tools = await mcp_manager.connect_mongo()
-    all_tools = local_tools + mongo_tools
-    llm_with_tools = llm.bind_tools(all_tools)
+    # 1. Setup Tools - Use local tools only
+    llm_with_tools = llm.bind_tools(local_tools)
     
     # 2. Nodes & Edges
     builder.add_node("assistant", assistant)
-    builder.add_node("tools", ToolNode(all_tools))
+    builder.add_node("tools", ToolNode(local_tools))
     builder.add_edge(START, "assistant")
     builder.add_conditional_edges("assistant", tools_condition)
     builder.add_edge("tools", "assistant")
@@ -176,8 +169,7 @@ async def run_app():
     try:
         await chat_interface(graph)
     finally:
-        # This ensures the MCP server connections are closed when you quit
-        await mcp_manager.disconnect_all()
+        pass  # No MCP connections to clean up
 
 
 if __name__ == "__main__":
