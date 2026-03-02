@@ -40,45 +40,31 @@ llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0)
 llm_with_tools = None
 
 
+# System Message
+sys_msg = SystemMessage(content=f"""
+You are an ERP Assistant for invoice processing.
+
+Tools:
+- extract_transaction_details(text): Parse transaction from natural language
+- create_invoice(company, amount, product, quantity): Store in database
+- get_ledger_data(): Show all transactions
+
+Instructions:
+- Extract EXACT details from user text (no invented data)
+- Handle currency/numbers correctly
+- For "show/display" requests, use get_ledger_data()
+- Return clear, user-friendly messages
+
+Examples:
+- "Amazon paid $40000 for 5 GPUs" → Extract → Create invoice
+- "Show all transactions" → Display ledger
+""")
+
 
 #------------------------------------AI ASSISTANT---------------------------------------
 async def assistant(state: AgentState):
     
     global llm_with_tools
-    
-    sys_msg = SystemMessage(content=f"""
-    You are an intelligent ERP Assistant focused on invoice processing and transaction management.
-
-    Your Workflow:
-    1. When user provides transaction text, use extract_transaction_details() to parse it
-    2. If extraction succeeds, use create_invoice() to store the data
-    3. If user asks to see records, use get_ledger_data() to display them
-    4. Always handle errors gracefully and inform users of the result
-
-    Important Rules:
-    - Extract EXACT values from user text (don't make up data)
-    - Handle currency symbols and numbers correctly
-    - Return clear success/failure messages
-    - Use proper error handling for invalid data
-
-    Example 1:
-    User: "Amazon paid $40000 for 5 GPUs"
-    → extract_transaction_details("Amazon paid $40000 for 5 GPUs")
-    → create_invoice("Amazon", 40000.0, "GPUs", 5)
-    → "Successfully created invoice #123 for Amazon - $40,000 for 5 GPUs"
-
-    Example 2:
-    User: "Microsoft bought 10 laptops for $15000"
-    → extract_transaction_details("Microsoft bought 10 laptops for $15000")
-    → create_invoice("Microsoft", 15000.0, "laptops", 10)
-    → "Successfully created invoice #124 for Microsoft - $15,000 for 10 laptops"
-
-    Example 3:
-    User: "Show me all transactions"
-    → get_ledger_data()
-    → [Display formatted ledger table]
-    
-    """)
     
     response = await llm_with_tools.ainvoke([sys_msg] + state["messages"])
     
@@ -159,12 +145,19 @@ async def chat_interface(graph):
         
         # 3. Process and display the final result
         last_message = final_state["messages"][-1]
-        if isinstance(last_message.content, list):
-            for item in last_message.content:
-                if item.get('type') == 'text':
+        content = last_message.content
+
+        if isinstance(content, list):
+            # Handle list of content items
+            for item in content:
+                if isinstance(item, dict) and item.get('type') == 'text':
                     print(item['text'])
+        elif isinstance(content, str):
+            # Handle string content
+            print(content)
         else:
-            print(last_message.content)
+            # Handle other content types
+            print(str(content))
         
         print("\n")
         
